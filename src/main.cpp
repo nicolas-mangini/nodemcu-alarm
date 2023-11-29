@@ -7,6 +7,7 @@ LED_BUILTIN (LOW = ON, HIGH = OFF)
 */
 
 #include <Arduino.h>
+#include <utils.h>
 #include <secrets.h>
 #include <NTPClient.h>
 #include <ESP8266WiFi.h>
@@ -14,106 +15,59 @@ LED_BUILTIN (LOW = ON, HIGH = OFF)
 #include <CTBot.h>
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "ar.pool.ntp.org", UTC);
+NTPClient timeClient(ntpUDP, NTP_CLIENT, UTC);
 CTBot tBot;
 
-void waitWifiConnection()
-{
-    int i = 0;
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(1000);
-        Serial.print(++i);
-        Serial.print(' ');
-    }
-}
-boolean connectWifi()
+void connect_wifi()
 {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     Serial.print("\nConnecting to ");
     Serial.print(WIFI_SSID);
-    Serial.println(" ...");
-    waitWifiConnection();
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        Serial.print('.');
+    }
+
     Serial.print("\nConnection established!");
     tBot.sendMessage(TELEGRAM_ID, "Connection established! at " + timeClient.getFormattedTime());
     Serial.print("\nIP address:\t");
     Serial.println(WiFi.localIP());
-    return true;
 }
 
-void waitBotConnection()
-{
-    int i = 0;
-    while (!tBot.testConnection())
-    {
-        delay(1000);
-        Serial.print(++i);
-        Serial.print(' ');
-    }
-}
-
-boolean connectTelegramBot()
+void connect_telegram_bot()
 {
     tBot.wifiConnect(WIFI_SSID, WIFI_PASSWORD);
     tBot.setTelegramToken(TELEGRAM_TOKEN);
-    Serial.print("\nConnecting Bot ...");
-    waitBotConnection();
+
+    while (!tBot.testConnection())
+    {
+        delay(1000);
+        Serial.print('.');
+    }
+
     timeClient.update();
-    Serial.print("\tBot connected! at " + timeClient.getFormattedTime());
-    tBot.sendMessage(TELEGRAM_ID, "Bot connected! at " + timeClient.getFormattedTime());
+    Serial.print("\tBot connected at " + timeClient.getFormattedTime());
+    tBot.sendMessage(TELEGRAM_ID, "Bot connected at " + timeClient.getFormattedTime());
     Serial.print("\n");
-    return true;
 }
 
 
-boolean isBetween(int currentHour, int startHour, int endHour)
+boolean is_barrier_open()
 {
-    if (endHour > startHour) // Time does not cross midnight
-    {
-        if (currentHour >= startHour && currentHour <= endHour)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    if (endHour < startHour) // Time cross midnight
-    {
-        if (currentHour >= startHour && currentHour >= endHour) // time is between before midnight
-        {
-            return true;
-        }
-        else if (currentHour <= startHour && currentHour <= endHour) // time is between after midnight
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    
-    // Add a return statement outside of any conditional block
-    return false;
-}
-
-
-boolean isOpen(int input)
-{
-    return digitalRead(input) == HIGH;
+    return digitalRead(BARRIER_PIN) == HIGH;
 }
 
 /*If current hour is between ONHOUR and OFFHOUR, checks for intrusion (Intrusion detecting ON)*/
-void checkBarrierIntrusion()
+void check_barrier_intrusion()
 {
-    if (isBetween(timeClient.getHours(), ONHOUR, OFFHOUR))
+    if (is_between(timeClient.getHours(), ONHOUR, OFFHOUR))
     {
-        if (isOpen(BARRIER_PIN))
+        if (is_barrier_open())
         {
-            Serial.println("Intrusion in BARRIER at " + timeClient.getFormattedTime());
-            tBot.sendMessage(TELEGRAM_ID, "Intrusion in BARRIER at " + timeClient.getFormattedTime());
+            Serial.println("ALERT INTRUSION at" + timeClient.getFormattedTime());
+            tBot.sendMessage(TELEGRAM_ID, "ALERT INTRUSION at" + timeClient.getFormattedTime());
             delay(5000);
         }
         digitalWrite(LED_BUILTIN, HIGH);
@@ -129,13 +83,13 @@ void setup()
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BARRIER_PIN, INPUT_PULLUP);
     digitalWrite(LED_BUILTIN, HIGH);
-    connectWifi();
+    connect_wifi();
     digitalWrite(LED_BUILTIN, LOW);
-    connectTelegramBot();
+    connect_telegram_bot();
 }
 
 void loop()
 {
     timeClient.update();
-    checkBarrierIntrusion();
+    check_barrier_intrusion();
 }
