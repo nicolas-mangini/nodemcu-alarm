@@ -6,26 +6,27 @@ LED_BUILTIN (LOW = ON, HIGH = OFF)
     3- BLINK: internet connected and barrier intrusion detecting ON
 */
 
+#include <Arduino.h>
+#include <secrets.h>
 #include <NTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <CTBot.h>
-#include <Credentials.h>
-
-const String WIFI_SSID = WIFI_SSID;
-const String WIFI_PASSWORD = WIFI_PASSWORD;
-const String TELEGRAM_TOKEN = TELEGRAM_TOKEN;
-const int64_t TELEGRAM_ID = TELEGRAM_ID;
-
-const int UTC = -10800; // UTC -3 in seconds
-const int ONHOUR = 21;
-const int OFFHOUR = 5;
-const int BARRIER = 13; // D7 pin
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "ar.pool.ntp.org", UTC);
 CTBot tBot;
 
+void waitWifiConnection()
+{
+    int i = 0;
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(1000);
+        Serial.print(++i);
+        Serial.print(' ');
+    }
+}
 boolean connectWifi()
 {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -40,10 +41,10 @@ boolean connectWifi()
     return true;
 }
 
-void waitWifiConnection()
+void waitBotConnection()
 {
     int i = 0;
-    while (WiFi.status() != WL_CONNECTED)
+    while (!tBot.testConnection())
     {
         delay(1000);
         Serial.print(++i);
@@ -64,16 +65,6 @@ boolean connectTelegramBot()
     return true;
 }
 
-void waitBotConnection()
-{
-    int i = 0;
-    while (!tBot.testConnection())
-    {
-        delay(1000);
-        Serial.print(++i);
-        Serial.print(' ');
-    }
-}
 
 boolean isBetween(int currentHour, int startHour, int endHour)
 {
@@ -103,7 +94,11 @@ boolean isBetween(int currentHour, int startHour, int endHour)
             return false;
         }
     }
+    
+    // Add a return statement outside of any conditional block
+    return false;
 }
+
 
 boolean isOpen(int input)
 {
@@ -115,7 +110,7 @@ void checkBarrierIntrusion()
 {
     if (isBetween(timeClient.getHours(), ONHOUR, OFFHOUR))
     {
-        if (isOpen(BARRIER))
+        if (isOpen(BARRIER_PIN))
         {
             Serial.println("Intrusion in BARRIER at " + timeClient.getFormattedTime());
             tBot.sendMessage(TELEGRAM_ID, "Intrusion in BARRIER at " + timeClient.getFormattedTime());
@@ -132,7 +127,7 @@ void setup()
 {
     Serial.begin(9600);
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(BARRIER, INPUT_PULLUP);
+    pinMode(BARRIER_PIN, INPUT_PULLUP);
     digitalWrite(LED_BUILTIN, HIGH);
     connectWifi();
     digitalWrite(LED_BUILTIN, LOW);
